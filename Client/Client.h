@@ -4,9 +4,9 @@
 #include <string>
 #include <vector>
 #include <cstdint>
-#include "protocol.h"
+#include "Protocol.h"
 
-//////////////////////////////////////////////////////////////////////////
+
 
 class Client
 {
@@ -21,19 +21,21 @@ public:
     void Start();
     void Stop();
 
+    void EnableShowLogMsg(bool is_enable) { m_show_log_msg = is_enable; }
+    bool IsShowLogMsg() { return m_show_log_msg; }
+
 private:
     void connect();
     void send_subscribe();
     void start_read_header();
     void start_read_body(uint32_t len, uint8_t data_type);
-    void process_body(uint8_t type, const std::vector<uint8_t>& body);
+    virtual void process_body(uint8_t type, const std::vector<uint8_t>& body);
 
     void schedule_reconnect();
 
-private:
+protected:
     boost::asio::io_context& m_io;
 
-    // The declaration order is important: socket/timers must be destroyed before io_context (it's external, so that's ok)
     boost::asio::ip::tcp::socket m_socket;
     boost::asio::ip::tcp::resolver m_resolver;
     boost::asio::steady_timer m_reconnect_timer;
@@ -45,5 +47,9 @@ private:
     // inbound buffers/state
     SSignalProtocolHeader m_header;
     std::vector<uint8_t> m_body;
+
+    uint16_t m_msg_num{0};
+
+    std::atomic<bool> m_show_log_msg{ true };
 };
 

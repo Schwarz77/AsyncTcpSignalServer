@@ -1,17 +1,17 @@
-// client.cpp
-
-
 #include "Client.h"
 #include <boost/asio.hpp>
 #include <iostream>
 #include <vector>
 #include <cstring>
-#include <Utils.h>
+#include <utils.h>
+
 
 namespace asio = boost::asio;
 using tcp = asio::ip::tcp;
 using error_code = boost::system::error_code;
 
+
+//////////////////////////////////////////////////////////////////////////
 
 Client::Client(asio::io_context& io, const std::string& host, uint16_t port, ESignalType signal_type)
     : m_io(io),
@@ -34,16 +34,17 @@ void Client::Start()
     m_reconnect_timer.cancel();
     connect();
 
-    if(m_show_log_msg)
-        std::cout << "Client started\n";
+    std::cout << "Client started\n";
 }
 
 void Client::Stop()
 {
     error_code ec;
 
-    m_reconnect_timer.cancel();
+    // Canceling timers will cause handlers to fail with error operation_aborted
+    m_reconnect_timer.cancel(ec);
 
+    // Closing a socket will also cause operation_aborted in pending read/writes
     if (m_socket.is_open())
     {
         m_socket.cancel(ec);
@@ -54,9 +55,12 @@ void Client::Stop()
 
 void Client::connect()
 {
-    m_resolver.async_resolve(m_host, std::to_string(m_port),
+    tcp::resolver::query q(m_host, std::to_string(m_port));
+
+    m_resolver.async_resolve(q,
         [this](const error_code& ec, tcp::resolver::results_type endpoints)
         {
+            // Checking for cancellation of operation (Stop)
             if (ec == asio::error::operation_aborted)
             {
                 return;
@@ -84,8 +88,7 @@ void Client::connect()
                         return;
                     }
 
-                    if (m_show_log_msg)
-                        std::cout << "Connected to server\n";
+                    std::cout << "Connected to server\n";
                     send_subscribe();
                 });
         });
@@ -145,15 +148,20 @@ void Client::start_read_header()
     asio::async_read(m_socket, asio::buffer(&m_header, sizeof(m_header)),
         [this](const error_code& ec, std::size_t /*n*/)
         {
+            if (ec == asio::error::operation_aborted)
+            {
+                return;
+            }
+
             if (ec)
             {
-                if (ec == asio::error::eof || ec == asio::error::connection_reset)
+                if (ec != asio::error::eof && ec != asio::error::connection_reset)
                 {
-                    std::cout << "Connection lost\n";
+                    write_error("Read header error", ec);
                 }
                 else
                 {
-                    write_error("Read header error", ec);
+                    std::cout << "Server closed connection\n";
                 }
 
                 schedule_reconnect();
@@ -178,7 +186,7 @@ void Client::start_read_header()
 
             if (hdr.msg_num != m_msg_num)
             {
-                std::cerr << "Bad header_msg_num = " << hdr.msg_num << " waiting num = " << m_msg_num << "\n";
+                std::cerr << "Bad msg_num\n";
                 schedule_reconnect();
                 return;
             }
@@ -212,10 +220,10 @@ void Client::start_read_body(uint32_t len, uint8_t data_type)
     asio::async_read(m_socket, asio::buffer(m_body),
         [this, data_type](const error_code& ec, std::size_t /*n*/)
         {
-            //if (ec == asio::error::operation_aborted)
-            //{
-            //    return;
-            //}
+            if (ec == asio::error::operation_aborted)
+            {
+                return;
+            }
 
             if (ec)
             {
@@ -254,14 +262,7 @@ void Client::process_body(uint8_t data_type, const std::vector<uint8_t>& body)
             double val;
             std::memcpy(&val, &ubits, sizeof(val));
 
-            if (m_show_log_msg)
-            {
-                if(m_msg_num == 1)
-                    std::cout << "Init state: id=" << id << " type=" << int(type) << " val=" << val << "\n";
-                else
-                    std::cout << "Update: id=" << id << " type=" << int(type) << " val=" << val << "\n";
-            }
-
+            std::cout << "Update: id=" << id << " type=" << int(type) << " val=" << val << "\n";
 
             //Signal s(id, static_cast<ESignalType>(type), val);
             // ...
@@ -270,8 +271,7 @@ void Client::process_body(uint8_t data_type, const std::vector<uint8_t>& body)
     }
     else if (data_type == 0x03)
     {
-        if (m_show_log_msg)
-            std::cout << "Alive msg\n";
+        std::cout << "Alive msg\n";
     }
     else
     {
@@ -281,6 +281,7 @@ void Client::process_body(uint8_t data_type, const std::vector<uint8_t>& body)
 
 void Client::schedule_reconnect()
 {
+    // Close the socket to abort the current operation.
     error_code ec;
     if (m_socket.is_open())
     {
@@ -292,6 +293,7 @@ void Client::schedule_reconnect()
     m_reconnect_timer.async_wait(
         [this](const error_code& ec)
         {
+            // If the timer is cancelled (at Stop) - exit
             if (ec == asio::error::operation_aborted)
             {
                 return;

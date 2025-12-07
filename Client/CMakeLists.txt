@@ -1,7 +1,30 @@
-#find_package(Boost 1.82 REQUIRED COMPONENTS system thread)
 
-include_directories(${Boost_INCLUDE_DIRS})
+add_library(ClientCore STATIC 
+    Client.h Client.cpp
+)
 
-add_executable(Client main.cpp Client.h Client.cpp)
+target_include_directories(
+    ClientCore
+    PUBLIC 
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
 
-target_link_libraries(Client PRIVATE Utils)
+target_link_libraries(
+    ClientCore 
+    PUBLIC 
+        Utils 
+        ProjectInclude 
+        Boost::system 
+        Boost::thread 
+        Boost::asio
+        #Boost::format
+)
+
+add_executable(Client main.cpp)
+
+
+target_link_libraries(
+    Client
+    PRIVATE 
+        ClientCore
+)

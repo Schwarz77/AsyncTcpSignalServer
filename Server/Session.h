@@ -1,14 +1,11 @@
 #pragma once
 
-#include <protocol.h>
+#include <Protocol.h>
 #include <boost/asio.hpp>
 #include <deque>
 #include <vector>
 #include <memory>
-
-
-
-///////////////////////////////////////////////////////////////////////////
+#include <chrono>
 
 
 class Server;
@@ -23,15 +20,13 @@ public:
     ~Session();
 
     void Start();
-    void DeliverUpdates(const std::vector<Signal>& updates); // called by Server dispatcher
-
+    void DeliverUpdates(const std::vector<Signal>& updates);
     bool Expired() const;
-
     void ForceClose();
 
 private:
     void async_read_header();
-    void async_read_body(std::size_t len, uint8_t dataType);
+    void async_read_body(std::size_t len, uint8_t data_type);
     void handle_subscribe(const std::vector<uint8_t>& payload);
     void do_write();
     void close();
@@ -51,13 +46,15 @@ private:
     std::vector<uint8_t> m_buf_body;
 
     std::deque<std::shared_ptr<std::vector<uint8_t>>> m_que_write;
-    bool m_writing{ false };
+    //bool m_writing{ false };
 
     uint8_t m_req_type{ 0 };
+
+    uint8_t m_msg_num{ 0 };
 
     time_point m_time_last_send;
 
     std::shared_ptr<Session> m_self;          // keep the self-pointer while the session is active
-    std::atomic<bool> m_closing{ false };        // closing flag (to avoid trying to close multiple times)
+    std::atomic<bool> m_closing{ false };     // closing flag (to avoid trying to close multiple times)
 
 };
