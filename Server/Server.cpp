@@ -1,8 +1,10 @@
-#include "server.h"
-#include "session.h"
+// server.cpp
+
+#include "Server.h"
+#include "Session.h"
 #include <iostream>
 #include <chrono>
-#include <utils.h>
+#include <Utils.h>
 
 
 namespace asio = boost::asio;
@@ -12,13 +14,11 @@ using time_point = std::chrono::steady_clock::time_point;
 using steady_clock = std::chrono::steady_clock;
 
 
-//////////////////////////////////////////////////////////////////////////
-
 
 Server::Server(asio::io_context& io, uint16_t port)
-    : m_io(io), m_acceptor(io, tcp::endpoint(tcp::v4(), port))
+    : m_io(io), m_acceptor(io, tcp::endpoint(tcp::v4(), port), true/*false*/)
 {
-    Start();
+    //Start();
 
     m_dispatcher = std::thread(&Server::dispatcher_loop, this);
     m_producer = std::thread(&Server::producer_loop, this);
@@ -31,9 +31,10 @@ Server::~Server()
 
 void Server::Start() 
 {
-    std::cout << "Server started\n";
-
     do_accept();
+
+    if (m_show_log_msg)
+        std::cout << "Server started\n";
 }
 
 void Server::do_accept() 
@@ -42,15 +43,37 @@ void Server::do_accept()
         {
             if (!ec) 
             {
-                std::cout << "Accepted connection\n";
+                if (m_show_log_msg)
+                    std::cout << "Accepted connection\n";
+
                 auto s = std::make_shared<Session>(std::move(socket), *this);
                 s->Start();
+
+                do_accept();
             }
-            else 
+            else if (ec == boost::asio::error::operation_aborted)
             {
-                write_error("Accept error", ec);
+                // Normal termination (cancellation)
+                
+                //std::cout << "Acceptor stopped gracefully." << std::endl;
             }
-            do_accept();
+            else if (   ec == boost::asio::error::would_block   ||
+                        ec == boost::asio::error::interrupted)
+            {
+                // Recoverable errors (need to try again).
+
+                write_error("Accept error", ec);
+                do_accept();
+            }
+            else
+            {
+                // Unrecoverable error (including 10009 Bad File Descriptor)
+
+                write_error("Accept error, STOP ACCEPT!", ec);
+
+                // do_accept() should never be called !
+
+            }
         });
 }
 
@@ -63,7 +86,16 @@ void Server::Stop()
 
     // close acceptor
     error_code ec;
-    m_acceptor.close(ec);
+
+    if (m_acceptor.is_open())
+    {
+        m_acceptor.cancel(ec);
+    }
+
+    if (m_acceptor.is_open())
+    {
+        m_acceptor.close(ec);
+    }
 
     if (m_producer.joinable())
     {
@@ -79,11 +111,11 @@ void Server::Stop()
     clear_sessions(); 
 }
 
-void Server::SetSignals(const std::vector<Signal> vecSignal)
+void Server::SetSignals(const VecSignal signals)
 {
-    asio::post(m_io, [this, vecSignal]()
+    asio::post(m_io, [this, signals]()
         {
-            // Closing all client connections so that clients can reconnect and receive the changed signal data.
+            // Closing all client connections so that clients can reconnect and receive the changed count of signals.
 
             std::lock_guard<std::mutex> lk(m_mtx_subscribers);
 
@@ -109,7 +141,7 @@ void Server::SetSignals(const std::vector<Signal> vecSignal)
 
                 auto now = steady_clock::now();
 
-                for (auto s : vecSignal)
+                for (auto s : signals)
                 {
                     m_state[s.id] = s;
                 }
@@ -136,19 +168,51 @@ void Server::UnregisterExpired()
         m_subscribers.end());
 }
 
-void Server::PushSignal(const Signal& s) 
+bool Server::PushSignal(const Signal& s) 
 {
+    bool pushed = false;
+
     {
-        std::lock_guard<std::mutex> lk(m_mtx_queue);
-        m_queue.push_back(s);
+        std::lock_guard<std::mutex> lk_state(m_mtx_state);
+
+        auto it = m_state.find(s.id);
+
+        if (it != m_state.end() && s.ts >= it->second.ts)
+        {
+            m_state[s.id] = s;
+            pushed = true;
+        }
     }
 
-    m_cv_queue.notify_one();
+    if (pushed)
+    {
+        {
+            std::lock_guard<std::mutex> lk_queue(m_mtx_queue);
+            m_queue.push_back(s);
+        }
+        m_cv_queue.notify_one();
+    }
+
+    return pushed;
 }
 
-std::vector<Signal> Server::GetSnapshot(uint8_t type) 
+bool Server::GetSignal(int id, Signal& s)
 {
-    std::vector<Signal> out;
+    std::lock_guard<std::mutex> lk(m_mtx_state);
+
+    auto it = m_state.find(id);
+    if (it != m_state.end())
+    {
+        s = it->second;
+        return true;
+    }
+
+    return false;
+}
+
+VecSignal Server::GetSnapshot(uint8_t type) 
+{
+    VecSignal out;
     std::lock_guard<std::mutex> lk(m_mtx_state);
 
     for (auto& p : m_state)
@@ -166,7 +230,7 @@ void Server::dispatcher_loop()
 {
     while (m_running) 
     {
-        std::vector<Signal> batch;
+        VecSignal batch;
 
         {
             std::unique_lock<std::mutex> lk(m_mtx_queue);
@@ -208,35 +272,49 @@ void Server::producer_loop()
 {
     std::mt19937 rng((unsigned)std::chrono::system_clock::now().time_since_epoch().count());
 
-    std::uniform_int_distribution<int> ids(1, 4);
+    std::uniform_int_distribution<int> discret_val(0, 1);
     std::uniform_real_distribution<double> delta(-0.5, 0.5);
 
     while (m_running)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(700 + (rng() % 800)));
 
-        std::lock_guard<std::mutex> lk(m_mtx_state);
+        if (!m_data_emulation || m_state.empty())
+        {
+            continue;
+        }
 
-        std::uniform_int_distribution<int> cnt_rnd(1, m_state.size());
+        int state_size;
+        {
+            std::lock_guard<std::mutex> lk(m_mtx_state);
+            state_size = m_state.size();
+        }
+
+        std::uniform_int_distribution<int> ids(1, state_size);
+
+        std::uniform_int_distribution<int> cnt_rnd(1, state_size);
         int cnt = cnt_rnd(rng);
 
         for (int i = 0; i < cnt; i++)
         {
             int id = ids(rng);
-            auto it = m_state.find(id);
-            if (it == m_state.end())
+
+            Signal current_s;
+            if (!GetSignal(id, current_s))
             {
                 continue;
             }
 
-            Signal& s = it->second;
-            s.value = (s.type == ESignalType::discret) ? (std::rand() % 2) : it->second.value + delta(rng);
-            s.ts = steady_clock::now();
+            // generate new signal
+            Signal new_s = current_s;
+            new_s.value = (new_s.type == ESignalType::discret) ? (discret_val(rng)) : new_s.value + delta(rng);
+            new_s.ts = steady_clock::now();
 
-            PushSignal(s);
+            PushSignal(new_s);
         }
     }
 }
+
 
 void Server::clear_sessions()
 {

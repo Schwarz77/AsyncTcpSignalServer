@@ -1,0 +1,176 @@
+name: C++ Cross-Platform CI
+run-name: C++ Cross-Platform CI Run # Sets the display name for the workflow run
+
+on:
+  push:
+    branches: [ main, master, develop ]
+    tags: # Triggers workflow only on version tags (e.g., v1.0.0)
+      - 'v*.*.*'
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  build_and_test:
+    name: Build & Test on ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ windows-latest, ubuntu-latest ]
+    
+    runs-on: ${{ matrix.os }}
+    
+    env:
+      # Settings for Linux dependencies (non-interactive)
+      DEBIAN_FRONTEND: noninteractive 
+      TZ: Europe/Moscow
+      
+      # VCPKG authentication variable
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      
+      VCPKG_ROOT: C:\vcpkg
+
+    steps:
+      # 1. Checkout Code
+      - name: Checkout Code
+        uses: actions/checkout@v4
+          
+      # 2. Install Dependencies (Linux)
+      - name: Install Dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get clean
+          # Install core packages and Boost
+          sudo apt-get install -y software-properties-common build-essential libboost-dev libboost-system-dev libboost-thread-dev libgtest-dev
+          
+          # Install older GCC (v11) for GitHub Actions runner compatibility
+          sudo apt-get install -y gcc-11 g++-11
+          
+      # 3. Cache VCPKG Packages (Windows)
+      - name: Cache VCPKG Packages (Windows)
+        if: runner.os == 'Windows'
+        id: cache-vcpkg
+        uses: actions/cache@v4
+        with:
+          # Cache installed VCPKG packages
+          path: C:\vcpkg\installed\x64-windows-static
+          key: ${{ runner.os }}-vcpkg-deps-boost-gtest-31 
+          restore-keys: |
+            ${{ runner.os }}-vcpkg-deps-boost-gtest-
+            
+      # 4. Install VCPKG Dependencies (Windows)
+      - name: Install VCPKG Dependencies (Windows)
+        if: runner.os == 'Windows' && steps.cache-vcpkg.outputs.cache-hit != 'true'
+        run: vcpkg install boost-asio boost-system boost-thread gtest boost-format --triplet x64-windows-static --no-print-usage --clean-after-build
+        shell: cmd
+        timeout-minutes: 15 
+
+      # 5. Configure CMake (Linux)
+      - name: Configure CMake (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          # Compatibility flags to avoid SIGILL on CI runners
+          COMPAT_FLAGS="-march=x86-64 -fno-aggressive-loop-optimizations"
+          
+          cmake -B build \
+          -DCMAKE_PREFIX_PATH="/usr/lib/x86_64-linux-gnu" \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=${{github.workspace}}/build/bin \
+          -DCMAKE_CXX_COMPILER=g++-11 \
+          -DCMAKE_C_COMPILER=gcc-11 \
+          -DCMAKE_CXX_FLAGS="$COMPAT_FLAGS" \
+          -DCMAKE_C_FLAGS="$COMPAT_FLAGS" \
+          -DCMAKE_CXX_FLAGS_RELEASE="$COMPAT_FLAGS" \
+          -DCMAKE_C_FLAGS_RELEASE="$COMPAT_FLAGS"
+
+      # 6. Configure CMake (Windows)
+      - name: Configure CMake (Windows)
+        if: runner.os == 'Windows'
+        run: cmake -B build -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake -DBoost_DIR="%VCPKG_ROOT%/installed/x64-windows-static/share/boost" -DGTest_DIR="%VCPKG_ROOT%/installed/x64-windows-static/share/gtest" -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded$<$<CONFIG:Debug>:Debug>" -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE="${{github.workspace}}/build/bin"
+        shell: cmd
+        
+      # 7. Build (Release)
+      - name: Build (Release)
+        run: cmake --build build --config Release
+
+      # 8. Run Tests (Linux)
+      - name: Run Tests (Linux)
+        if: runner.os == 'Linux'
+        run: ctest --output-on-failure --verbose
+        working-directory: ${{github.workspace}}/build
+        
+      # 9. Run Tests (Windows)
+      - name: Run Tests (Windows)
+        if: runner.os == 'Windows'
+        run: ctest -C Release --output-on-failure --verbose
+        working-directory: ${{github.workspace}}/build
+        shell: cmd
+
+      # 10. Prepare Binaries for Upload - Copy executables to staging directory
+      - name: Prepare Binaries for Upload
+        run: |
+          mkdir -p build/staging
+          
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            # Windows: copy with .exe extension
+            cp build/bin/Server.exe build/staging/Server.exe
+            cp build/bin/Client.exe build/staging/Client.exe
+            cp build/bin/Tests.exe build/staging/Tests.exe
+          else
+            # Linux: copy without extension
+            cp build/bin/Server build/staging/Server
+            cp build/bin/Client build/staging/Client
+            cp build/bin/Tests build/staging/Tests
+          fi
+        shell: bash # Use bash for cross-platform logic
+        
+      # 11. Upload Artifacts (Staging directory only)
+      - name: Upload Artifacts for Release
+        uses: actions/upload-artifact@v4
+        with:
+          # Name used by the downstream release job
+          name: ${{ matrix.os }}-binaries
+          path: build/staging/* # Upload staging contents
+            
+  release:
+    name: Create GitHub Release
+    # Grant write permission for release creation
+    permissions:
+      contents: write
+      
+    # Run only on version tags
+    if: startsWith(github.ref, 'refs/tags/v')
+    # Requires successful completion of all builds/tests
+    needs: [build_and_test]
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. Download all build artifacts
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          
+      # 2. Prepare Assets for Upload
+      - name: Prepare Assets for Upload
+        run: |
+          mkdir final_assets
+          
+          # Linux Binaries -> Append -linux suffix
+          cp artifacts/ubuntu-latest-binaries/Server final_assets/Server-linux
+          cp artifacts/ubuntu-latest-binaries/Client final_assets/Client-linux
+          cp artifacts/ubuntu-latest-binaries/Tests final_assets/Tests-linux
+          
+          # Windows Binaries -> Append -windows suffix before .exe
+          cp artifacts/windows-latest-binaries/Server.exe final_assets/Server-windows.exe
+          cp artifacts/windows-latest-binaries/Client.exe final_assets/Client-windows.exe
+          cp artifacts/windows-latest-binaries/Tests.exe final_assets/Tests-windows.exe
+          
+      # 3. Create Release and Upload Assets
+      - name: Create GitHub Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: final_assets/* # Upload only files from the flattened, renamed directory
+          draft: false # Create a draft release for manual review before publishing
+          prerelease: false
+          body: |
+            # Release: ${{ github.ref_name }}
+            

@@ -1,15 +1,19 @@
 // Utils.cpp
 
 
-#include "utils.h"
+#include "Utils.h"
 #include <iostream>
 //#include <format>
 #include <boost/format.hpp>
 
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
 using error_code = boost::system::error_code;
 
-
-std::string win32_message_english(DWORD code)
+#if defined(_WIN32)
+std::string win32_message_english(unsigned long /*DWORD*/ code)
 {
     LPVOID msgBuf = nullptr;
 
@@ -41,6 +45,7 @@ std::string win32_message_english(DWORD code)
 
     return msg;
 }
+#endif
 
 void write_error(const std::string& text, const error_code& ec)
 {

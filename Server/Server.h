@@ -1,5 +1,6 @@
 #pragma once
-#include "session.h"
+
+#include "Session.h"
 #include <boost/asio.hpp>
 #include <vector>
 #include <unordered_map>
@@ -30,10 +31,16 @@ public:
     void RegisterSession(std::shared_ptr<Session> s);
     void UnregisterExpired();
 
-    // signal API
-    void PushSignal(const Signal& s);
-    std::vector<Signal> GetSnapshot(uint8_t type);
-    void SetSignals(const std::vector<Signal> vecSignal);
+    // server API
+    void SetSignals(const VecSignal signals);
+    bool PushSignal(const Signal& s);
+    bool GetSignal(int id, Signal& s);
+    VecSignal GetSnapshot(uint8_t type);
+
+    void EnableDataEmulation(bool is_enable) { m_data_emulation = is_enable; }
+    bool IsEnableDataEmulation(bool is_enable) { return m_data_emulation; }
+    void EnableShowLogMsg(bool is_enable) { m_show_log_msg = is_enable; }
+    bool IsShowLogMsg() { return m_show_log_msg; }
 
     boost::asio::io_context& GetIoContext() { return m_io; }
 
@@ -43,7 +50,7 @@ private:
     void producer_loop();
     void clear_sessions();
 
-private:
+protected:
     boost::asio::io_context& m_io;
     boost::asio::ip::tcp::acceptor m_acceptor;
 
@@ -61,4 +68,8 @@ private:
 
     std::thread m_dispatcher;
     std::thread m_producer;
+
+    std::atomic<bool> m_data_emulation{ true };
+    std::atomic<bool> m_show_log_msg{ true };
+
 };

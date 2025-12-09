@@ -5,16 +5,13 @@
 #include <iostream>
 #include <cstring>
 #include <cassert>
-#include <utils.h>
+#include <Utils.h>
 
 namespace asio = boost::asio;
 using tcp = asio::ip::tcp;
 using error_code = boost::system::error_code;
 using time_point = std::chrono::steady_clock::time_point;
 using steady_clock = std::chrono::steady_clock;
-
-
-///////////////////////////////////////////////////////////////////////////
 
 
 Session::Session(tcp::socket socket, Server& server)
@@ -31,7 +28,7 @@ Session::~Session()
 
 void Session::Start()
 {
-    m_self = shared_from_this(); // Holding a shared_ptr (self). But if close() is not called for the Session, there will be a leak
+    m_self = shared_from_this(); // Holding a shared_ptr (self)
 
     async_read_header();
 }
@@ -55,7 +52,8 @@ void Session::async_read_header()
                     if (ec == asio::error::connection_reset ||
                         ec == asio::error::eof)
                     {
-                        std::cout << "Client disconnected\n";
+                        if (m_server.IsShowLogMsg())
+                            std::cout << "Client disconnected\n";
                     }
                     else if (ec == asio::error::operation_aborted)
                     {
@@ -80,6 +78,7 @@ void Session::async_read_header()
                     close();
                     return;
                 }
+
                 if (hdr.version != 1)
                 {
                     std::cerr << "Session: bad version, closing\n";
@@ -87,7 +86,14 @@ void Session::async_read_header()
                     return;
                 }
 
-                uint8_t dataType = hdr.dataType;
+                if (hdr.msg_num != 0)
+                {
+                    std::cerr << "Session: bad msg_num, closing\n";
+                    close();
+                    return;
+                }
+
+                uint8_t data_type = hdr.data_type;
                 uint32_t len = net_to_host_u32(hdr.len);
 
                 if (len > 10 * 1024 * 1024)
@@ -97,12 +103,12 @@ void Session::async_read_header()
                     return;
                 }
 
-                // read body of length 'len'
-                async_read_body(len, dataType);
+                async_read_body(len, data_type);
+
             }));
 }
 
-void Session::async_read_body(std::size_t len, uint8_t dataType)
+void Session::async_read_body(std::size_t len, uint8_t data_type)
 {
     if (!m_socket.is_open())
     {
@@ -118,14 +124,15 @@ void Session::async_read_body(std::size_t len, uint8_t dataType)
 
     asio::async_read(m_socket, asio::buffer(m_buf_body),
         asio::bind_executor(m_strand,
-            [this, self, dataType, len](error_code ec, std::size_t /*n*/)
+            [this, self, data_type, len](error_code ec, std::size_t /*n*/)
             {
                 if (ec)
                 {
                     if (ec == asio::error::connection_reset ||
                         ec == asio::error::eof)
                     {
-                        std::cout << "Client disconnected\n";
+                        if (m_server.IsShowLogMsg())
+                            std::cout << "Client disconnected\n";
                     }
                     else if (ec == asio::error::operation_aborted)
                     {
@@ -139,13 +146,13 @@ void Session::async_read_body(std::size_t len, uint8_t dataType)
                     return;
                 }
 
-                if (dataType == 0x01)
+                if (data_type == 0x01)
                 {
                     handle_subscribe(m_buf_body);
                 }
                 else
                 {
-                    std::cerr << "Session: unexpected dataType from client: " << int(dataType) << "\n";
+                    std::cerr << "Session: unexpected dataType from client: " << int(data_type) << "\n";
                 }
 
             }));
@@ -161,15 +168,11 @@ void Session::handle_subscribe(const std::vector<uint8_t>& payload)
     }
 
     m_req_type = payload[0];
-    std::cout << "Session: client subscribed to type=" << int(m_req_type) << "\n";
 
-    // Keep alive self pointer while session registered in server (defensive)
-    //m_self = shared_from_this();
+    if (m_server.IsShowLogMsg())
+        std::cout << "Session: client subscribed to type=" << int(m_req_type) << "\n";
 
-    // register session with server (thread-safe inside server)
-    // IMPORTANT: Ensure Server::RegisterSession stores a shared_ptr (not only weak_ptr).
     m_server.RegisterSession(shared_from_this());
-
 
     // send initial snapshot for this type
     auto snap = m_server.GetSnapshot(m_req_type);
@@ -179,15 +182,13 @@ void Session::handle_subscribe(const std::vector<uint8_t>& payload)
     }
 }
 
-// DeliverUpdates mostly unchanged
-void Session::DeliverUpdates(const std::vector<Signal>& updates)
+void Session::DeliverUpdates(const VecSignal& updates)
 {
     auto self = shared_from_this();
     asio::post(m_strand, [this, self, updates]() 
         {
             if (!m_socket.is_open()) 
             {
-                // if socket already closed, drop updates
                 return;
             }
 
@@ -219,7 +220,8 @@ void Session::DeliverUpdates(const std::vector<Signal>& updates)
             SSignalProtocolHeader hdr;
             hdr.signature = host_to_net_u16(SIGNAL_HEADER_SIGNATURE);
             hdr.version = 1;
-            hdr.dataType = 0x02;
+            hdr.data_type = 0x02;
+            hdr.msg_num = m_msg_num++;
             hdr.len = host_to_net_u32(static_cast<uint32_t>(payload.size()));
 
             auto frame = std::make_shared<std::vector<uint8_t>>();
@@ -230,7 +232,7 @@ void Session::DeliverUpdates(const std::vector<Signal>& updates)
                 std::memcpy(frame->data() + sizeof(hdr), payload.data(), payload.size());
             }
 
-            bool need_start = m_que_write.empty() && !m_writing;
+            bool need_start = m_que_write.empty() /*&& !m_writing*/;
             m_que_write.push_back(frame);
             if (need_start)
             {
@@ -243,25 +245,23 @@ void Session::DeliverUpdates(const std::vector<Signal>& updates)
 
 void Session::do_write()
 {
-    // must run in strand
     if (!m_socket.is_open())
     {
         m_que_write.clear();
-        m_writing = false;
+        //m_writing = false;
         return;
     }
 
     if (m_que_write.empty())
     {
-        m_writing = false;
+        //m_writing = false;
         return;
     }
 
-    m_writing = true;
+    //m_writing = true;
     auto frame = m_que_write.front();
     auto self = shared_from_this();
 
-    // Note: we already use bind_executor when posting so this call runs in strand.
     asio::async_write(m_socket, asio::buffer(*frame),
         asio::bind_executor(m_strand,
             [this, self, frame](error_code ec, std::size_t /*n*/) 
@@ -271,7 +271,8 @@ void Session::do_write()
                     if (ec == asio::error::connection_reset ||
                         ec == asio::error::eof)
                     {
-                        std::cout << "Client disconnected\n";
+                        if (m_server.IsShowLogMsg())
+                            std::cout << "Client disconnected\n";
                     }
                     else if(ec == asio::error::operation_aborted)
                     {
@@ -282,7 +283,6 @@ void Session::do_write()
                         write_error("Write error", ec);
                     }
 
-                    // If write fails, close once (safe)
                     close();
                     return;
                 }
@@ -295,21 +295,19 @@ void Session::do_write()
                 }
                 else
                 {
-                    m_writing = false;
+                    //m_writing = false;
                 }
             }));
 }
 
 void Session::close()
 {
-    // idempotent close
     bool expected = false;
     if (!m_closing.compare_exchange_strong(expected, true))
     {
-        return; // already closing
+        return;
     }
 
-    // perform socket shutdown & close synchronously then clear queue on strand
     error_code ec;
     if (m_socket.is_open())
     {
@@ -322,7 +320,7 @@ void Session::close()
     asio::post(m_strand, [this, self]() 
         {
             m_que_write.clear();
-            m_writing = false;
+            //m_writing = false;
 
             m_self.reset();
         });
