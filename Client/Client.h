@@ -24,14 +24,17 @@ public:
     void EnableShowLogMsg(bool is_enable) { m_show_log_msg = is_enable; }
     bool IsShowLogMsg() { return m_show_log_msg; }
 
+    MapSignal GeSignals();
+    uint64_t GetPacketCount() { return m_cnt_packet; }
+
 private:
     void connect();
     void send_subscribe();
     void start_read_header();
     void start_read_body(uint32_t len, uint8_t data_type);
     virtual void process_body(uint8_t type, const std::vector<uint8_t>& body);
-
     void schedule_reconnect();
+    void clear_data();
 
 protected:
     boost::asio::io_context& m_io;
@@ -48,7 +51,10 @@ protected:
     SSignalProtocolHeader m_header;
     std::vector<uint8_t> m_body;
 
-    uint16_t m_msg_num{0};
+    std::atomic<uint64_t> m_cnt_packet{0};
+
+    std::mutex m_mtx_signal;
+    MapSignal m_map_signal;
 
     std::atomic<bool> m_show_log_msg{ true };
 };

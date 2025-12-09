@@ -20,7 +20,7 @@ public:
     ~Session();
 
     void Start();
-    void DeliverUpdates(const std::vector<Signal>& updates);
+    void DeliverUpdates(const VecSignal& updates);
     bool Expired() const;
     void ForceClose();
 
@@ -55,6 +55,6 @@ private:
     time_point m_time_last_send;
 
     std::shared_ptr<Session> m_self;          // keep the self-pointer while the session is active
-    std::atomic<bool> m_closing{ false };     // closing flag (to avoid trying to close multiple times)
+    std::atomic<bool> m_closing{ false };
 
 };

@@ -32,10 +32,10 @@ public:
     void UnregisterExpired();
 
     // server API
-    void SetSignals(const std::vector<Signal> vecSignal);
+    void SetSignals(const VecSignal signals);
     bool PushSignal(const Signal& s);
     bool GetSignal(int id, Signal& s);
-    std::vector<Signal> GetSnapshot(uint8_t type);
+    VecSignal GetSnapshot(uint8_t type);
 
     void EnableDataEmulation(bool is_enable) { m_data_emulation = is_enable; }
     bool IsEnableDataEmulation(bool is_enable) { return m_data_emulation; }

@@ -182,7 +182,7 @@ void Session::handle_subscribe(const std::vector<uint8_t>& payload)
     }
 }
 
-void Session::DeliverUpdates(const std::vector<Signal>& updates)
+void Session::DeliverUpdates(const VecSignal& updates)
 {
     auto self = shared_from_this();
     asio::post(m_strand, [this, self, updates]() 

@@ -16,14 +16,16 @@ public:
         , m_snapshot_received_promise(std::move(snapshot_received_promise))
     {}
 
-    void SetInitEtalonData(std::map<uint32_t, Signal>& map_init_etalon) { m_map_init_etalon = std::move(map_init_etalon); }
-    void SetFinalEtalonData(std::map<uint32_t, Signal>& map_final_etalon, uint32_t cnt_signal) { m_map_final_etalon = std::move(map_final_etalon); m_cnt_signal_final_state = cnt_signal; }
+    void SetInitEtalonData(MapSignal& map_init_etalon) { m_map_init_etalon = std::move(map_init_etalon); }
+    void SetFinalEtalonData(MapSignal& map_final_etalon, uint32_t cnt_signal) { m_map_final_etalon = std::move(map_final_etalon); m_cnt_signal_final_state = cnt_signal; }
 
 protected:
     void process_body(uint8_t type, const std::vector<uint8_t>& body) override
     {
         if (type == 0x02)
         {
+            std::lock_guard<std::mutex> lock(m_mtx_signal);
+
             size_t pos = 0;
             while (pos + 13 <= body.size())
             {
@@ -48,7 +50,7 @@ protected:
                 Signal s(id, static_cast<ESignalType>(type), val);
 
                 // check seconds msgs
-                if (m_msg_num > 1 && m_map_signal.find(id) == m_map_signal.end())
+                if (m_cnt_packet > 1 && m_map_signal.find(id) == m_map_signal.end())
                 {
                     // signal was received that was not in the full first packet - it is error
                     m_data_received_promise.set_value(false);
@@ -58,11 +60,12 @@ protected:
                 }
 
                 m_map_signal[id] = s;
+
                 m_cnt_signal++;
 
             }
 
-            if (m_msg_num == 1)
+            if (m_cnt_packet == 1)
             {
                 // check first msg:
                 // full first packet recieved, compare it with m_map_init_etalon
@@ -78,7 +81,7 @@ protected:
                     m_snapshot_received_promise.set_value(true);
                 }
             }
-            else //if (m_msg_num > 1) 
+            else //if (m_cnt_packet > 1) 
             {
                 // compare m_map_signal & m_map_final_etalon and also compare count rcvd signal 
                 if (m_map_signal == m_map_final_etalon && 
@@ -106,16 +109,16 @@ private:
     std::promise<bool> m_snapshot_received_promise;
 
     // etalon data
-    std::map<uint32_t, Signal> m_map_init_etalon;
-    std::map<uint32_t, Signal> m_map_final_etalon;
+    MapSignal m_map_init_etalon;
+    MapSignal m_map_final_etalon;
     uint32_t m_cnt_signal_final_state;
 
-    std::map<uint32_t, Signal> m_map_signal;
+    //count rcvd signals
     uint32_t m_cnt_signal{ 0 };
 };
 
 
-void add_signal_changes(int cnt_circle, std::vector<Signal>& signals, std::map<uint32_t, Signal>& map_state)
+void add_signal_changes(int cnt_circle, VecSignal& signals, std::map<uint32_t, Signal>& map_state)
 {
     std::mt19937 rng((unsigned)std::chrono::system_clock::now().time_since_epoch().count());
 
@@ -132,7 +135,7 @@ void add_signal_changes(int cnt_circle, std::vector<Signal>& signals, std::map<u
         map_state[s.id] = s;
     }
 
-    std::vector<Signal> signal_changes;
+    VecSignal signal_changes;
 
     for (int i = 0; i < cnt_circle * signals.size(); i++)
     {
@@ -153,9 +156,9 @@ void add_signal_changes(int cnt_circle, std::vector<Signal>& signals, std::map<u
     signals.insert(signals.end(), signal_changes.begin(), signal_changes.end());
 }
 
-std::vector<Signal> make_wrong_time_signals(const std::vector<Signal>& signals)
+VecSignal make_wrong_time_signals(const VecSignal& signals)
 {
-    std::vector<Signal> wrong_signals;
+    VecSignal wrong_signals;
 
     for (auto s : signals)
     {
@@ -187,13 +190,14 @@ TEST(IntegrationTest, DataLogicTest)
         std::thread io_thread_srv([&io]() { io.run(); });
 
         // prepare test data
-        std::vector<Signal> test_signals =
+        VecSignal test_signals =
         {
             {1, ESignalType::discret, 0},
             {2, ESignalType::analog, 10.0},
             {3, ESignalType::discret, 1},
             {4, ESignalType::analog, 12.5},
         };
+
         server.SetSignals(test_signals);
         server.EnableShowLogMsg(false);
 
@@ -221,7 +225,7 @@ TEST(IntegrationTest, DataLogicTest)
         // Stage 1: Waiting for first full packet
 
         // etalon data for first msg
-        std::map<uint32_t, Signal> map_init_etalon;
+        MapSignal map_init_etalon;
         for (auto& s : test_signals)
         {
             map_init_etalon[s.id] = s;
@@ -246,7 +250,7 @@ TEST(IntegrationTest, DataLogicTest)
         // Stage 2: Sending Updates and check final data
 
         // etalon data for end test
-        std::map<uint32_t, Signal> map_final_etalon;
+        MapSignal map_final_etalon;
  
         // the number of signals the client should receive
         int cnt = test_signals.size(); // count for first msg
@@ -265,9 +269,13 @@ TEST(IntegrationTest, DataLogicTest)
 
 
         // send all it to server
+        int i = 0;
         for (auto& s : test_signals)
         {
             server.PushSignal(s);
+
+            if (i++ % 20 == 0)
+                std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Just in case: this is so that the all signals are not sent to clinet in one packet
         }
 
         // waiting for the final test to be completed

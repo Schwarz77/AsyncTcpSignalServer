@@ -111,9 +111,9 @@ void Server::Stop()
     clear_sessions(); 
 }
 
-void Server::SetSignals(const std::vector<Signal> vecSignal)
+void Server::SetSignals(const VecSignal signals)
 {
-    asio::post(m_io, [this, vecSignal]()
+    asio::post(m_io, [this, signals]()
         {
             // Closing all client connections so that clients can reconnect and receive the changed count of signals.
 
@@ -141,7 +141,7 @@ void Server::SetSignals(const std::vector<Signal> vecSignal)
 
                 auto now = steady_clock::now();
 
-                for (auto s : vecSignal)
+                for (auto s : signals)
                 {
                     m_state[s.id] = s;
                 }
@@ -210,9 +210,9 @@ bool Server::GetSignal(int id, Signal& s)
     return false;
 }
 
-std::vector<Signal> Server::GetSnapshot(uint8_t type) 
+VecSignal Server::GetSnapshot(uint8_t type) 
 {
-    std::vector<Signal> out;
+    VecSignal out;
     std::lock_guard<std::mutex> lk(m_mtx_state);
 
     for (auto& p : m_state)
@@ -230,7 +230,7 @@ void Server::dispatcher_loop()
 {
     while (m_running) 
     {
-        std::vector<Signal> batch;
+        VecSignal batch;
 
         {
             std::unique_lock<std::mutex> lk(m_mtx_queue);

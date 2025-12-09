@@ -11,7 +11,7 @@ public:
         : Server(io, 0) 
     {}
 
-    void FillState(const std::vector<Signal>& signals) 
+    void FillState(const VecSignal& signals) 
     {
         std::lock_guard<std::mutex> lk(m_mtx_state);
         for (const auto& s : signals) 
@@ -40,7 +40,7 @@ TEST(ServerTest, SnapshotFiltering)
     server.EnableDataEmulation(false);
 
     // prepare test data
-    std::vector<Signal> test_signals = 
+    VecSignal test_signals = 
     {
         {1, ESignalType::discret, 0.0},
         {2, ESignalType::analog, 10.0},

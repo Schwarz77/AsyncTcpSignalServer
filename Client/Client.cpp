@@ -52,6 +52,13 @@ void Client::Stop()
     }
 }
 
+MapSignal Client::GeSignals()
+{
+    std::lock_guard<std::mutex> lock(m_mtx_signal);
+
+    return m_map_signal;
+}
+
 void Client::connect()
 {
     m_resolver.async_resolve(m_host, std::to_string(m_port),
@@ -86,6 +93,9 @@ void Client::connect()
 
                     if (m_show_log_msg)
                         std::cout << "Connected to server\n";
+
+                    clear_data();
+
                     send_subscribe();
                 });
         });
@@ -93,8 +103,6 @@ void Client::connect()
 
 void Client::send_subscribe()
 {
-    m_msg_num = 0;
-
     // Build subscribe payload
     std::vector<uint8_t> payload;
     payload.push_back(static_cast<uint8_t>(m_signal_type));
@@ -176,14 +184,17 @@ void Client::start_read_header()
                 return;
             }
 
-            if (hdr.msg_num != m_msg_num)
+
+            uint8_t msg_num = m_cnt_packet % 256; // in header msg_num has type uint8_t !
+
+            if (hdr.msg_num != msg_num)
             {
-                std::cerr << "Bad header_msg_num = " << hdr.msg_num << " waiting num = " << m_msg_num << "\n";
+                std::cerr << "Bad header_msg_num = " << static_cast<unsigned int>(hdr.msg_num) << " waiting msg_num = " << static_cast<unsigned int>(msg_num) << "\n";
                 schedule_reconnect();
                 return;
             }
 
-            m_msg_num++;
+            m_cnt_packet++;
 
             uint32_t len = net_to_host_u32(hdr.len);
 
@@ -256,15 +267,21 @@ void Client::process_body(uint8_t data_type, const std::vector<uint8_t>& body)
 
             if (m_show_log_msg)
             {
-                if(m_msg_num == 1)
+                if(m_cnt_packet == 1)
                     std::cout << "Init state: id=" << id << " type=" << int(type) << " val=" << val << "\n";
                 else
                     std::cout << "Update: id=" << id << " type=" << int(type) << " val=" << val << "\n";
             }
 
 
-            //Signal s(id, static_cast<ESignalType>(type), val);
-            // ...
+            Signal s(id, static_cast<ESignalType>(type), val);
+            
+            {
+                std::lock_guard<std::mutex> lock(m_mtx_signal);
+
+                m_map_signal[id] = s;
+            }
+
 
         }
     }
@@ -301,3 +318,13 @@ void Client::schedule_reconnect()
         });
 }
 
+void Client::clear_data()
+{
+    m_cnt_packet = 0;
+
+    {
+        std::lock_guard<std::mutex> lock(m_mtx_signal);
+
+        m_map_signal.clear();
+    }
+}

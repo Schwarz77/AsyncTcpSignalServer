@@ -63,7 +63,7 @@ protected:
 
             }
 
-            if (m_msg_num == 1 && m_cnt_signal != 0)
+            if (m_cnt_packet == 1 && m_cnt_signal != 0)
             {
                 // first data rcvd
                 m_ready_clients_count.fetch_add(1);
@@ -108,7 +108,7 @@ TEST(StressTest, MultipleClientsLoadTest)
         server.EnableShowLogMsg(false);
 
         // test data
-        std::vector<Signal> test_signals =
+        VecSignal test_signals =
         {
             {1, ESignalType::discret, 0},
             {2, ESignalType::analog, 10.0},
@@ -187,6 +187,7 @@ TEST(StressTest, MultipleClientsLoadTest)
 
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
+
         ASSERT_EQ(NUM_CLIENTS, ready_clients_count.load()) << "Clients readiness synchronization error.";
 
         //////////////////////////////////////////////////////////////////////////
@@ -199,6 +200,11 @@ TEST(StressTest, MultipleClientsLoadTest)
             for (const auto& signal : test_signals)
             {
                 server.PushSignal(signal);
+            }
+
+            if (i % 5000 == 0)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100)); //this is so that the all signals are not sent to clinet in one packet
             }
         }
 
@@ -214,6 +220,7 @@ TEST(StressTest, MultipleClientsLoadTest)
 
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
+
         ASSERT_EQ(NUM_CLIENTS, finished_clients_count.load()) << "error: not all clients completed their work.";
 
 
@@ -235,6 +242,7 @@ TEST(StressTest, MultipleClientsLoadTest)
         }
 
         io_thread_server.join();
+
         for (auto& thread : client_threads) 
         {
             if (thread.joinable()) 

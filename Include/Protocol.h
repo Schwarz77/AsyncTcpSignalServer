@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <type_traits>
 #include <chrono>
+#include <map>
 #include "Utils.h"
 
 // Header layout (9 bytes, network byte order / big-endian):
@@ -65,10 +66,13 @@ struct Signal
 
     bool operator == (const Signal& rhs) const
     {
-        return  (   id == rhs.id 
-                &&  type == rhs.type 
-                &&  double_equals(value, rhs.value) 
-                //&&  ts == rhs.ts      // temp disable for gtest
-                                    );
+        return  (       id == rhs.id 
+                    &&  type == rhs.type 
+                    &&  double_equals(value, rhs.value) 
+                    //&&  ts == rhs.ts                      // temp disable for gtest
+                                                    );
     }
 };
+
+typedef std::map<uint32_t, Signal> MapSignal;
+typedef std::vector<Signal> VecSignal;

@@ -8,7 +8,7 @@ using time_point = std::chrono::steady_clock::time_point;
 using steady_clock = std::chrono::steady_clock;
 
 
-//#define TEST_SERVER_API
+// #define TEST_SERVER_API
 
 #ifdef TEST_SERVER_API
 // test server API
@@ -28,14 +28,14 @@ int main()
         server.EnableDataEmulation(true);
         server.EnableShowLogMsg(true);
 
-        std::vector<Signal> vecSignal = 
+        VecSignal signals = 
         {   Signal{ 1, ESignalType::discret } ,
             Signal{ 2, ESignalType::discret },
             Signal{ 3, ESignalType::analog },
             Signal{ 4, ESignalType::analog },
         };
 
-        server.SetSignals(vecSignal);
+        server.SetSignals(signals);
 
         server.Start();
 
@@ -45,8 +45,8 @@ int main()
         bool isStop = false;
         std::mutex mtx;
         std::condition_variable cv;
-        std::thread tss(thread_set_signals, std::ref(server), vecSignal.size(), std::ref(isStop), std::ref(mtx), std::ref(cv));
-        std::thread tsu(thread_update_signals, std::ref(server), vecSignal.size(), std::ref(isStop), std::ref(mtx), std::ref(cv));
+        std::thread tss(thread_set_signals, std::ref(server), signals.size(), std::ref(isStop), std::ref(mtx), std::ref(cv));
+        std::thread tsu(thread_update_signals, std::ref(server), signals.size(), std::ref(isStop), std::ref(mtx), std::ref(cv));
 #endif
 
 
@@ -82,14 +82,14 @@ void thread_set_signals(Server& server, size_t signal_count, bool& isStop, std::
             }
         }
 
-        std::vector<Signal> vecSignal;
+        VecSignal signals;
         for (int i = 0; i < signal_count; i += 2)
         {
-            vecSignal.push_back(Signal(i, ESignalType::discret));
-            vecSignal.push_back(Signal(i + 1, ESignalType::analog));
+            signals.push_back(Signal(i, ESignalType::discret));
+            signals.push_back(Signal(i + 1, ESignalType::analog));
         }
 
-        server.SetSignals(vecSignal);
+        server.SetSignals(signals);
     }
 }
 
