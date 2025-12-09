@@ -1,91 +1,171 @@
-Cross-Platform Async TCP Signal Server (Boost.Asio)
+Async TCP Signal Server / Client (C++ / Boost.Asio)
 
-This project is a real-time system prototype for asynchronous data delivery over TCP/IP, built using C++ and the Boost.Asio library.
+Overview
 
-The architecture employs a Push Model to ensure minimal latency when delivering state updates (signals) to connected clients.
+This project implements a high-performance, real-time asynchronous data distribution system using modern C++ and the Boost.Asio library. The codebase demonstrates a robust, push-based architecture designed for low-latency delivery of state updates (referred to as "signals") over TCP/IP, eliminating the overhead of client polling.
 
-💡 Key Features
+Key Features
 
-Boost.Asio: A fully asynchronous, multi-threaded server implementation for high performance and non-blocking I/O.
+Fully Asynchronous I/O: Server and client are built entirely on Boost.Asio's asynchronous primitives.
 
-Dispatcher: The central component that manages client sessions and is responsible for reliable signal distribution to all connected clients.
+Push-Model Delivery: Messages are actively pushed from the server upon update (no client polling).
 
-Real-Time (Low Latency):
+Minimal Protocol Overhead: Uses a lightweight, efficient binary protocol.
 
-Push-Model: The server actively pushes changes to clients (Server -> Client), eliminating the need for client polling, which significantly reduces latency.
+Delta Updates: Sends the initial full state, followed by only the changed values (delta).
 
-Asynchronous I/O: All network operations (read and write) are non-blocking thanks to Boost.Asio, preventing delays caused by waiting for a slow client.
+Automatic Reconnection: Client implements robust, automatic reconnection logic with a configurable delay.
 
-State Synchronization: Upon connection, the client receives a full packet of signals with current states. Subsequently, the server sends only packets containing changes (deltas).
+Connection Health: Periodic keep-alive messages (heartbeats) maintain connection health during periods of inactivity.
 
-Packet Sequencing Control.
+Thread Safety: Ensures data integrity and reliable concurrent access using Boost.Asio Strands to protect the session's write queue.
 
-Client Reliability:
+Cross-Platform: Confirmed build on Linux (GCC) and Windows (MSVC).
 
-Implements automatic reconnection logic with exponential backoff.
+Testing: Comprehensive unit tests using GoogleTest.
 
-The client monitors a timeout and initiates a reconnection if no message (including "Alive" messages from the server) has been received within the set interval.
+CI/CD: Continuous integration managed via GitHub Actions.
 
-Protocol: A custom, lightweight binary protocol is used for efficient data transmission.
+Architecture
 
-📐 Project Architecture
+Server (Dispatcher Core)
 
-The system consists of two primary components:
+The server utilizes a centralized Dispatcher pattern to manage concurrency and message fan-out.
 
-Server (Dispatcher Core):
+Acceptor: Accepts and validates incoming TCP connections.
 
-Dispatcher: Registers active sessions and asynchronously distributes updates.
+Session: Manages a dedicated, thread-safe connection with a single client. Sessions own the asynchronous read and write logic, leveraging Strands for serialized access to the internal write queue.
 
-Session: Manages the connection in a thread-safe manner. The client requests a subscription to the required signal type(s) from the session upon connection establishment.
+Dispatcher: Maintains the registry of all active sessions and broadcasts updates to them upon receiving a new signal from the internal Producer or an external source.
 
-Heartbeat / Keep-Alive: If there are no data changes to send, the server periodically sends an "Alive" message to maintain the connection and reset the client's timeout.
+Client
 
-Note: The Producer component (test data generator) is included purely for Push Model demonstration and must be replaced by an external data source in a production environment.
+The client establishes a persistent connection, subscribes to the data stream, and handles asynchronous message processing, including automatic recovery from network interruptions.
 
-Client:
+Protocol
 
-Maintains a stable connection and implements the Reliable Reconnection logic.
+The custom lightweight protocol ensures efficient transmission:
 
-All I/O operations are non-blocking.
+Fixed Header: Includes mandatory fields (signature, version, message type, and payload size).
 
-🛠️ Project Build (CMake)
+Endianness: All multi-byte fields are transmitted in Network Byte Order (Big-Endian).
 
-The project uses CMake for building. Dependencies (Boost, GTest) are managed via apt on Linux and VCPKG on Windows.
+Payload: Binary data containing the signal identifier and its updated value.
 
-1. Prerequisites
+Build
 
-Platform
+The project uses CMake for build configuration.
 
-Requirements
+Dependencies
 
-Linux
+C++ Compiler: GCC/G++ (v11+) or MSVC (2019+).
 
-GCC/G++ (v11+), CMake, libboost-dev, libgtest-dev (via apt).
+CMake: Version 3.10 or higher.
 
-Windows
+Boost: Required for Asio (version 1.70+ recommended).
 
-Visual Studio 2019/2022, VCPKG. The VCPKG_ROOT environment variable must be set.
+GoogleTest: Used for unit testing.
 
-2. Build Instructions (Release)
+Standard Build Instructions (Release Configuration)
 
-First, clone the repository: git clone <your_repo_url> && cd <your_repo_name>
+First, clone the repository:
 
-Linux
+git clone <repo_url>
+cd <repo>
+
+
+Linux (Using System Dependencies)
 
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 cmake --build .
 
 
+Windows (Using Vcpkg)
 
-
-Windows
+Ensure that VCPKG is installed and the environment variable %VCPKG_ROOT% is correctly set.
 
 mkdir build && cd build
 cmake .. -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake -DCMAKE_BUILD_TYPE=Release
+cmake --build . --config Release
+
+
+Binaries (Server and Client executables) are generated in the build/bin directory.
+
+Running
+
+Server
+
+Start the server, listening on port 5000:
+
+./bin/Server 5000
+
+
+Client
+
+Start the client and connect to the server at 127.0.0.1:5000:
+
+./bin/Client 127.0.0.1 5000
+
+
+Testing
+
+Unit tests are crucial for verifying the protocol handling and thread safety logic. Test files are located in /tests.
+
+Executing Tests
+
+To run the unit tests in Debug mode:
+
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Debug
 cmake --build .
+ctest --output-on-failure --verbose
+
+
+Continuous Integration (CI)
+
+CI workflows are managed via GitHub Actions to ensure build and test compatibility across target platforms.
+
+Configuration file: .github/workflows/ci.yml
+
+CI tasks include:
+
+Building and testing on Ubuntu and Windows.
+
+Automatic dependency installation (Boost + GoogleTest).
+
+Generating and attaching platform-specific release artifacts on version tags (e.g., v1.0.0).
+
+Directory Structure
+
+├── .github/workflows/
+│   └── ci.yml             (CI configuration)
+├── Server/
+│   ├── Session.h
+│   ├── Session.cpp
+│   ├── Server.h
+│   ├── Server.cpp
+│   └── main.cpp
+├── Client/
+│   ├── Client.h
+│   ├── Client.cpp
+│   └── main.cpp
+├── Include/
+│   └── Protocol.h
+├── Utils/
+│   ├── Utils.h
+│   └── Utils.cpp
+├── Tests/
+│   ├── server_test.cpp
+│   ├── session_test.cpp
+│   ├── utility_test.cpp
+│   ├── perf_test.cpp
+│   ├── integration_test.cpp
+│   └── stress_test.cpp
+└──build/
 
 
 
+License
 
-The compiled binaries (Server, Client, Tests) will be located in the build/bin directory.
+This project is licensed under the MIT License.
