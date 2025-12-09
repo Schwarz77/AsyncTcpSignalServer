@@ -165,8 +165,8 @@ Configuration file: .github/workflows/ci.yml
 
 # Examples of use
 
-![Run](Doc/Run.jpg)
-![Tests](Doc/Tests.jpg)
+![Run](Docs/Run.jpg)
+![Tests](Docs/Tests.jpg)
 
 ## License
 
