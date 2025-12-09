@@ -170,29 +170,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: final_assets/* # Upload only files from the flattened, renamed directory
-          draft: true # Create a draft release for manual review before publishing
+          draft: false # Create a draft release for manual review before publishing
           prerelease: false
           body: |
             # Release: ${{ github.ref_name }}
             
-            Welcome! This is an automated release for the cross-platform Server/Client prototype.
-            
-            ## 🛠️ Changes in this Version
-            
-            * 
-            
-            ## ✨ Key Features
-            
-            * **Boost.Asio:** Asynchronous, multi-threaded server implementation.
-            * **Push Protocol:** Server actively pushes updates to connected clients.
-            * **Reliability:** Client includes automatic reconnection logic (incl. reconnection by timeout).
-            
-            ## 📦 Available Artifacts
-            
-            Attached are the binary files successfully built on:
-            
-            * **Windows:** `Server-windows.exe`, `Client-windows.exe`, `Tests-windows.exe`
-            * **Linux:** `Server-linux`, `Client-linux`, `Tests-linux`
-            
-            ---
-            *This release was created automatically using GitHub Actions.*
