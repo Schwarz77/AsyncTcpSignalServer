@@ -168,4 +168,4 @@ Generating and attaching platform-specific release artifacts on version tags (e.
 
 ## License
 
-This project is licensed under the ### MIT License.
+This project is licensed under the **MIT License**.
