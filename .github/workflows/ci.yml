@@ -4,9 +4,8 @@ run-name: C++ Cross-Platform CI Run # Sets the display name for the workflow run
 on:
   push:
     branches: [ main, master, develop ]
-    #tags: # Triggers workflow only on version tags (e.g., v1.0.0)
-      #- 'v*.*.*'
-      #- 'v*.*.*'
+    tags: # Triggers workflow only on version tags (e.g., v1.0.0)
+      - 'v*.*.*'
   pull_request:
     branches: [ main, master, develop ]
 
