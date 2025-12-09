@@ -1,10 +1,10 @@
-#Cross-Platform Async TCP Signal Server / Client (C++ / Boost.Asio)
+# Cross-Platform Async TCP Signal Server / Client (C++ / Boost.Asio)
 
-##Overview
+## Overview
 
 This project implements a high-performance, real-time asynchronous data distribution system using modern C++ and the Boost.Asio library. The codebase demonstrates a robust, push-based architecture designed for low-latency delivery of state updates (referred to as "signals") over TCP/IP, eliminating the overhead of client polling.
 
-##Key Features
+## Key Features
 
 Fully Asynchronous I/O: Server and client are built entirely on Boost.Asio's asynchronous primitives.
 
@@ -26,9 +26,9 @@ Testing: Comprehensive unit tests using GoogleTest.
 
 CI/CD: Continuous integration managed via GitHub Actions.
 
-##Architecture
+## Architecture
 
-###Server (Dispatcher Core)
+### Server (Dispatcher Core)
 
 The server utilizes a centralized Dispatcher pattern to manage concurrency and message fan-out.
 
@@ -38,11 +38,11 @@ Session: Manages a dedicated, thread-safe connection with a single client. Sessi
 
 Dispatcher: Maintains the registry of all active sessions and broadcasts updates to them upon receiving a new signal from the internal Producer or an external source.
 
-###Client
+### Client
 
 The client establishes a persistent connection, subscribes to the data stream, and handles asynchronous message processing, including automatic recovery from network interruptions.
 
-###Protocol
+### Protocol
 
 The custom lightweight protocol ensures efficient transmission:
 
@@ -52,11 +52,11 @@ Endianness: All multi-byte fields are transmitted in Network Byte Order (Big-End
 
 Payload: Binary data containing the signal identifier and its updated value.
 
-##Build
+## Build
 
 The project uses CMake for build configuration.
 
-###Dependencies
+### Dependencies
 
 C++ Compiler: GCC/G++ (v11+) or MSVC (2019+).
 
@@ -66,7 +66,7 @@ Boost: Required for Asio (version 1.70+ recommended).
 
 GoogleTest: Used for unit testing.
 
-###Standard Build Instructions (Release Configuration)
+### Standard Build Instructions (Release Configuration)
 
 First, clone the repository:
 
@@ -74,14 +74,14 @@ git clone <repo_url>
 cd <repo>
 
 
-###Linux (Using System Dependencies)
+### Linux (Using System Dependencies)
 
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 cmake --build .
 
 
-###Windows (Using Vcpkg)
+### Windows (Using Vcpkg)
 
 Ensure that VCPKG is installed and the environment variable %VCPKG_ROOT% is correctly set.
 
@@ -92,27 +92,27 @@ cmake --build . --config Release
 
 Binaries (Server and Client executables) are generated in the build/bin directory.
 
-##Running
+## Running
 
-###Server
+### Server
 
 Start the server, listening on port 5000:
 
 ./bin/Server 5000
 
 
-###Client
+### Client
 
 Start the client and connect to the server at 127.0.0.1:5000:
 
 ./bin/Client 127.0.0.1 5000
 
 
-##Testing
+## Testing
 
 Unit tests are crucial for verifying the protocol handling and thread safety logic. Test files are located in /tests.
 
-###Executing Tests
+### Executing Tests
 
 To run the unit tests in Debug mode:
 
@@ -122,13 +122,13 @@ cmake --build .
 ctest --output-on-failure --verbose
 
 
-##Continuous Integration (CI)
+## Continuous Integration (CI)
 
 CI workflows are managed via GitHub Actions to ensure build and test compatibility across target platforms.
 
 Configuration file: .github/workflows/ci.yml
 
-###CI tasks include:
+### CI tasks include:
 
 Building and testing on Ubuntu and Windows.
 
@@ -136,7 +136,7 @@ Automatic dependency installation (Boost + GoogleTest).
 
 Generating and attaching platform-specific release artifacts on version tags (e.g., v1.0.0).
 
-##Directory Structure
+## Directory Structure
 ```
 ├── .github/workflows/
 │   └── ci.yml             (CI configuration)
@@ -166,6 +166,6 @@ Generating and attaching platform-specific release artifacts on version tags (e.
 ```
 
 
-##License
+## License
 
-This project is licensed under the ###MIT License.
+This project is licensed under the ### MIT License.
