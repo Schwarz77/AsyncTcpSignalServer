@@ -163,6 +163,10 @@ Configuration file: .github/workflows/ci.yml
 └──build/
 ```
 
+# Examples of use
+
+![Run](Doc/Run.jpg)
+![Tests](Doc/Tests.jpg)
 
 ## License
 
