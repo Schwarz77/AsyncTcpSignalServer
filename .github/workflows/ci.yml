@@ -1,5 +1,5 @@
 name: C++ Cross-Platform CI
-#run-name: C++ Cross-Platform CI Run # Sets the display name for the workflow run
+run-name: C++ Cross-Platform CI Run # Sets the display name for the workflow run
 
 on:
   push:
