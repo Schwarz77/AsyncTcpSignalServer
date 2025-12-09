@@ -128,7 +128,7 @@ Configuration file: .github/workflows/ci.yml
  
  - Running CTest with verbose output. 
  
- - Generating and attaching platform-specific release artifacts on version tags (e.g., v1.0.0).
+ - Generating and attaching platform-specific release artifacts.
 
 ## Directory Structure
 ```
