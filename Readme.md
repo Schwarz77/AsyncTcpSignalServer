@@ -1,4 +1,4 @@
-Async TCP Signal Server / Client (C++ / Boost.Asio)
+Cross-Platform Async TCP Signal Server / Client (C++ / Boost.Asio)
 
 Overview
 
