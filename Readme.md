@@ -1,4 +1,4 @@
-# Asynchronous TCP Signal Server (C++ / Boost.Asio)
+# Async TCP Signal Server (C++ / Boost.Asio)
 
 ## Overview
 
