@@ -1,60 +1,51 @@
-# Cross-Platform Async TCP Signal Server / Client (C++ / Boost.Asio)
+# Asynchronous TCP Signal Server (C++ / Boost.Asio)
 
 ## Overview
 
-This project implements a high-performance, real-time asynchronous data distribution system using modern C++ and the Boost.Asio library. The codebase demonstrates a robust, push-based architecture designed for low-latency delivery of state updates (referred to as "signals") over TCP/IP, eliminating the overhead of client polling.
+This project implements a high-performance, real-time asynchronous data distribution system using modern C++ and the Boost.Asio library. 
+The codebase demonstrates a robust, push-based architecture designed for low-latency delivery of signal states over TCP/IP, eliminating the overhead of continuous client polling.
+
+## Architecture & Design
+
+The server is built around a centralized **Dispatcher Core** and relies entirely on **Boost.Asio's asynchronous I/O** primitives for maximum throughput and scalability.
+
+1.  **Asynchronous I/O:** Utilizes non-blocking operations to manage thousands of concurrent connections on a limited thread pool, ensuring efficient use of system resources.
+2.  **Dispatcher Pattern:** Manages active connections and broadcasts state updates to all subscribed clients immediately upon data change.
+3.  **Thread Safety:** The write path for each client session is strictly protected by **Boost.Asio Strands** (serialized execution contexts) to ensure thread-safe access to the output buffers and guarantee in-order message delivery. 
 
 ## Key Features
 
- - Fully Asynchronous I/O: Server and client are built entirely on Boost.Asio's asynchronous primitives.
+* **Push-Model Delivery:** Messages are actively pushed from the server upon data change (no client polling).
+* **Minimal Protocol:** Uses a custom, lightweight binary protocol designed for low-overhead delta transmission.
+* **Resilience:** The client features robust automatic reconnection and connection heartbeats.
+* **Comprehensive Testing:** Includes unit, integration, and load tests using GoogleTest.
+* **CI/CD:** Continuous integration is configured via GitHub Actions to ensure cross-platform compatibility.
 
- - Push-Model Delivery: Messages are actively pushed from the server upon update (no client polling).
+## Performance and Optimization
 
- - Minimal Protocol Overhead: Uses a lightweight, efficient binary protocol.
+Design priorities are throughput and minimal P99 latency. Key optimizations include:
 
- - Delta Updates: Sends the initial full state, followed by only the changed values (delta).
+* **Binary Protocol:** Uses network byte order (Big-Endian) for efficient cross-platform serialization of fixed-size headers.
+* **Delta Updates:** After initial state synchronization, only differences in data (deltas) are transmitted, significantly reducing network traffic.
+* **Non-Blocking Logic:** The use of strands ensures that no single session can block the entire I/O loop, maintaining predictable latency for all connected clients.
 
- - Automatic Reconnection: Client implements robust, automatic reconnection logic with a configurable delay.
+## Protocol Specification
 
- - Connection Health: Periodic keep-alive messages (heartbeats) maintain connection health during periods of inactivity.
+The communication is based on a structured binary frame:
 
- - Thread Safety: Ensures data integrity and reliable concurrent access using Boost.Asio Strands to protect the session's write queue.
+| Field | Type | Size (Bytes) | Description |
+| :--- | :--- | :--- | :--- |
+| Signature | UINT16 | 2 | Magic number for protocol identification. |
+| Version | UINT8 | 1 | Protocol version. |
+| Message Type | UINT8 | 1 | Command or Data type identifier. |
+| Message Number | UINT8 | 1 | Current Message Number. |
+| Payload Size | UINT32 | 4 | Size of the dynamic payload that follows. |
+| Data | UINT8 | Payload Size | Signals Data. |
 
- - Cross-Platform: Confirmed build on Linux (GCC) and Windows (MSVC).
-
- - Testing: Comprehensive unit tests using GoogleTest.
-
- - CI/CD: Continuous integration managed via GitHub Actions.
-
-## Architecture
-
-### Server (Dispatcher Core)
-
-The server utilizes a centralized Dispatcher pattern to manage concurrency and message fan-out.
-
- 1. Acceptor: Accepts and validates incoming TCP connections.
-
- 2. Session: Manages a dedicated, thread-safe connection with a single client. Sessions own the asynchronous read and write logic, leveraging Strands for serialized access to the internal write queue.
-
- 3. Dispatcher: Maintains the registry of all active sessions and broadcasts updates to them upon receiving a new signal from the internal Producer or an external source.
-
-### Client
-
-The client establishes a persistent connection, subscribes to the data stream, and handles asynchronous message processing, including automatic recovery from network interruptions.
-
-### Protocol
-
-The custom lightweight protocol ensures efficient transmission:
-
- - Fixed Header: Includes mandatory fields (signature, version, message type, and payload size).
-
- - Endianness: All multi-byte fields are transmitted in Network Byte Order (Big-Endian).
-
- - Payload: Binary data containing the signal identifier and its updated value.
 
 ## Build
 
-The project uses CMake for build configuration.
+The project uses **CMake** for build configuration.
 
 ### Dependencies
 
@@ -110,7 +101,8 @@ Start the client and connect to the server at 127.0.0.1:5000:
 
 ## Testing
 
-Unit tests are crucial for verifying the protocol handling and thread safety logic. Test files are located in /tests.
+Comprehensive testing, including unit, integration, performance, and stress tests, is critical for verifying the protocol handling, thread safety logic, and high throughput. 
+Test files are located in /tests.
 
 ### Executing Tests
 
@@ -140,15 +132,18 @@ Configuration file: .github/workflows/ci.yml
 
 ## Directory Structure
 ```
+├── CMakeLists.txt 
 ├── .github/workflows/
 │   └── ci.yml             (CI configuration)
 ├── Server/
+│   ├── CMakeLists.txt 
 │   ├── Session.h
 │   ├── Session.cpp
 │   ├── Server.h
 │   ├── Server.cpp
 │   └── main.cpp
 ├── Client/
+│   ├── CMakeLists.txt 
 │   ├── Client.h
 │   ├── Client.cpp
 │   └── main.cpp
@@ -158,6 +153,7 @@ Configuration file: .github/workflows/ci.yml
 │   ├── Utils.h
 │   └── Utils.cpp
 ├── Tests/
+│   ├── CMakeLists.txt 
 │   ├── server_test.cpp
 │   ├── session_test.cpp
 │   ├── utility_test.cpp
