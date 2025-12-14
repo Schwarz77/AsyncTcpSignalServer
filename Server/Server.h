@@ -11,7 +11,7 @@
 #include <deque>
 #include <atomic>
 #include <random>
-
+#include <list>
 
 class Server 
 {
