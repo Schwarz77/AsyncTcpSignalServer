@@ -270,6 +270,9 @@ void Server::dispatcher_loop()
 
 void Server::producer_loop()
 {
+    // Currently, this is data emulation. 
+    // It will be replaced with real data ingestion later.
+
     std::mt19937 rng((unsigned)std::chrono::system_clock::now().time_since_epoch().count());
 
     std::uniform_int_distribution<int> discret_val(0, 1);

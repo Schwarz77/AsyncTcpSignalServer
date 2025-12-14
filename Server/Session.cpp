@@ -248,17 +248,14 @@ void Session::do_write()
     if (!m_socket.is_open())
     {
         m_que_write.clear();
-        //m_writing = false;
         return;
     }
 
     if (m_que_write.empty())
     {
-        //m_writing = false;
         return;
     }
 
-    //m_writing = true;
     auto frame = m_que_write.front();
     auto self = shared_from_this();
 
@@ -293,20 +290,13 @@ void Session::do_write()
                 {
                     do_write();
                 }
-                else
-                {
-                    //m_writing = false;
-                }
             }));
 }
 
 void Session::close()
 {
-    bool expected = false;
-    if (!m_closing.compare_exchange_strong(expected, true))
-    {
+    if (m_closing.exchange(true))
         return;
-    }
 
     error_code ec;
     if (m_socket.is_open())
@@ -320,7 +310,6 @@ void Session::close()
     asio::post(m_strand, [this, self]() 
         {
             m_que_write.clear();
-            //m_writing = false;
 
             m_self.reset();
         });

@@ -55,7 +55,7 @@ protected:
     boost::asio::ip::tcp::acceptor m_acceptor;
 
     std::mutex m_mtx_subscribers;
-    std::vector<std::weak_ptr<Session>> m_subscribers;
+    std::list<std::weak_ptr<Session>> m_subscribers;
 
     std::mutex m_mtx_state;
     std::unordered_map<uint32_t, Signal> m_state;

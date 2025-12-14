@@ -1,8 +1,8 @@
-# Async TCP Signal Server (C++ / Boost.Asio)
+# Async Cross-Platform TCP Signal Server (C++ / Boost.Asio)
 
 ## Overview
 
-This project implements a high-performance, real-time asynchronous data distribution system using modern C++ and the Boost.Asio library. 
+This project implements a high-performance, real-time, cross-platform asynchronous data distribution system using modern C++ and the Boost.Asio library. 
 The codebase demonstrates a robust, push-based architecture designed for low-latency delivery of signal states over TCP/IP, eliminating the overhead of continuous client polling.
 
 ## Architecture & Design
@@ -33,6 +33,8 @@ Design priorities are throughput and minimal P99 latency. Key optimizations incl
 
 The communication is based on a structured binary frame:
 
+- Header
+
 | Field | Type | Size (Bytes) | Description |
 | :--- | :--- | :--- | :--- |
 | Signature | UINT16 | 2 | Magic number for protocol identification. |
@@ -41,6 +43,10 @@ The communication is based on a structured binary frame:
 | Message Number | UINT8 | 1 | Current Message Number. |
 | Payload Size | UINT32 | 4 | Size of the dynamic payload that follows. |
 | Data | UINT8 | Payload Size | Signals Data. |
+
+- Signal data
+
+| Field | Type | Size (Bytes) | Description |
 
 
 ## Build

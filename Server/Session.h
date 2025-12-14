@@ -46,7 +46,6 @@ private:
     std::vector<uint8_t> m_buf_body;
 
     std::deque<std::shared_ptr<std::vector<uint8_t>>> m_que_write;
-    //bool m_writing{ false };
 
     uint8_t m_req_type{ 0 };
 
